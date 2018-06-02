@@ -120,7 +120,9 @@ def show_points(image, points, radius=2):
     return image_with_circles
 
 
-# # input document
+# # Input
+# 
+# We get a text document as input
 
 # In[6]:
 
@@ -133,12 +135,22 @@ TEXT = cv2.threshold(src=cv2.imread("arabic.jpg", cv2.IMREAD_GRAYSCALE),
 imshow_gray(TEXT)
 
 
+# # Erode
+# We erode input to emphasize words
+
+# In[19]:
+
+
+TEXT_ERODE=cv2.erode(TEXT, circle(3))
+imshow_gray(TEXT_ERODE)
+
+
 # # Distance transform
 
-# In[7]:
+# In[8]:
 
 
-DIST = cv2.distanceTransform(TEXT, cv2.DIST_L2, cv2.DIST_MASK_5)
+DIST = cv2.distanceTransform(TEXT_ERODE, cv2.DIST_L2, cv2.DIST_MASK_5)
 imshow_gray(DIST)
 
 
@@ -147,12 +159,8 @@ imshow_gray(DIST)
 # Each pixel $p$ is consider local maximum if $p > q_1 \wedge p> q_2$
 # 
 # for some $q_1, q_1$ where $q_1, q_2$ are opposite pixels in the 8-member inviroment of $p$
-# 
-# Possible arrangements:
-# 
-# $$\begin{pmatrix} - & - & -\\ q_2 & p & q_1\\ -   & - & -\end{pmatrix},\begin{pmatrix}-& - & q_1\\-   & p & -\\q_2 & - & -\end{pmatrix},\begin{pmatrix}- & q_1 & -\\- & p & -\\- & q_2 & -\end{pmatrix},\begin{pmatrix}q_1 & - & -\\-   & p & -\\-   & - & q_2\end{pmatrix}$$
 
-# In[8]:
+# In[9]:
 
 
 def local_maxima(image):
@@ -174,7 +182,7 @@ def local_maxima(image):
     return uint8(reduce(or_, local_maximas))
 
 
-# In[9]:
+# In[10]:
 
 
 LOCAL_DIST_MAXIMA = cvclose(local_maxima(DIST), cross((3, 3)))
@@ -182,13 +190,19 @@ LOCAL_DIST_MAXIMA = cvclose(local_maxima(DIST), cross((3, 3)))
 imshow_gray(LOCAL_DIST_MAXIMA, figsize=(50, 50))
 
 
-# # Vertices
+# # Graph
 # 
+# We extract the vertices and the edges from the local maxima matrix
 
-#  ## Neighbor counting
-#  
+# ## Neighbor counting
+# 1. For a pixel $p$ it is defined it has a neighbors in a direction $d$ , if it has non-zero pixels in that direction.
+# 2. We count of number of directions a pixel has neighbors on. we get a number in $0\dots4$.
+#    
+#    e.g, a pixel with one neighbor (left) and a pixel with two neighbors(right):
+#    
+#    $\begin{pmatrix}0&0&0&0&0\\0&0&0&0&0\\0&0&\textbf{p}&0&0\\0&0&1&0&0\\0&0&1&0&0 \end{pmatrix} \qquad\begin{pmatrix}0&0&0&0&0\\0&0&0&0&0\\0&0&\textbf{p}&1&1\\0&0&1&0&0\\0&0&1&0&0 \end{pmatrix}$
 
-# In[10]:
+# In[11]:
 
 
 def rotations(matrix):
@@ -236,6 +250,14 @@ def neighbor_count(binary_matrix):
     res[:, -1] = 0
     return res
 
+
+# ## Centeroids
+# 1. Let $FM$ be pixels $p$ with [neighbor count](#Neighbor-counting) $n(p) > 2$ 
+# 2. Graph vertices are defined as the centeroids of connected components of $FM$ 
+
+# In[12]:
+
+
 def vertices(skeleton):
     vertex_pixels = uint8((neighbor_count(skeleton) > 2))
     centeroids = cv2.connectedComponentsWithStats(cv2.dilate(vertex_pixels, cross((3, 3))))[-1]
@@ -250,10 +272,14 @@ imshow(show_points(LOCAL_DIST_MAXIMA, LOCAL_MAX_VERTS, 2),
 #  # Edges
 
 # ## BFS
-# 
-# [Another Cell](#m-adjacent-neighbors)
+# * We define set $C=$ [Centeroids](#Centeroids)
+# * While $C\neq \emptyset$
+#   - Start from some $c \in C$ and set $C = C - \{c\}$
+#   - Perform a bfs scan on [local maxima](#Local-maxima)
+#   - Define current graph vertice as closest vertice at the curr pixels $p$ rectangle enviroment of some $r$
+#   - If found vertice is different than pervious found vertice in scan, we add an edge connecting curr vertice to found one
 
-# In[11]:
+# In[13]:
 
 
 def area_to_vert(verts, radius):
@@ -263,7 +289,7 @@ def area_to_vert(verts, radius):
                                      range(y - radius, y + radius)))
 
 
-# In[12]:
+# In[20]:
 
 
 def edges_scan(search_mask, get_vert, start_points):
@@ -287,7 +313,7 @@ def edges_scan(search_mask, get_vert, start_points):
 ROW_INDEX_VERTS = [(c, r) for r, c in LOCAL_MAX_VERTS]
 
 EDGES = edges_scan(
-    search_mask=LOCAL_DIST_MAXIMA.copy(),
+    search_mask=LOCAL_DIST_MAXIMA.copy(),#cv2.dilate(LOCAL_DIST_MAXIMA, circle(3)),
     get_vert=area_to_vert(ROW_INDEX_VERTS, 5),
     start_points=set(ROW_INDEX_VERTS))
 
