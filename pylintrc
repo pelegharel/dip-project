@@ -1,8 +1,9 @@
 [FORMAT]
-good-names=i,j,k,x
+good-names=i,j,k,x,r,c,px,py
 
 [REPORTS]
 output-format=colorized
 
 
 generated-members=cv.*
+

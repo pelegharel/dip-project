@@ -24,8 +24,8 @@ get_ipython().run_line_magic('matplotlib', 'inline')
 # In[2]:
 
 
-def cross(size):
-    return cv2.getStructuringElement(cv2.MORPH_CROSS, (size, size))
+def cross(shape):
+    return cv2.getStructuringElement(cv2.MORPH_CROSS, shape)
 
 def circle(size):
     return cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (size, size))
@@ -34,13 +34,15 @@ def cvclose(image, kernel):
     return cv2.erode(cv2.dilate(image, kernel), kernel)
 
 
-# # m-adjacent neighbors <a id='m-adjacent'></a>
+# # m-adjacent neighbors
 # 
-#  For a given image $I$ and a mask $M$, pixel $p, q$ are considered m-adjacent if one of the following is true
+#  For a given image $I$ and a mask $M$, pixel $p, q$ are
+#  considered m-adjacent if one of the following is true
 #  
 #   1. $q$ is a 4-adjcent of $p$ where $p,q\in M$
 #   2. $q$ is diagonal of $q$ where $p, q\in M$ *and*
-#      there is no $\omega\in M$ where $\omega$  is both 4-adjecent of $p$ and 4-adjecent of $q$
+#      there is no $\omega\in M$ where $\omega$ 
+#      is both 4-adjecent of $p$ and 4-adjecent of $q$
 # 
 
 # In[3]:
@@ -57,20 +59,18 @@ def adjesent_m(pixel, mask):
         r, c = pixel
         return is_in_image((r, c), mask.shape) and mask[r, c]
     
-    def addp(offset):
-        px, py = pixel
-        ox, oy = offset
-        return (px + ox, py + oy)
+    def add_offset(offset):
+        return tuple(map(add, pixel, offset))
     
     neighbors_4 = [offset
                    for offset in [(1, 0), (0, 1), (-1, 0), (0, -1)]
-                   if is_in(addp(offset))]
+                   if is_in(add_offset(offset))]
     
     neighbors_diag = [(o_r, o_c)
                       for o_r, o_c in [(1, 1), (-1, 1), (-1, -1), (1, -1)]
-                      if set([(0, o_r), (o_c, 0)]).isdisjoint(neighbors_4) and is_in(addp((o_r, o_c)))]
+                      if set([(0, o_r), (o_c, 0)]).isdisjoint(neighbors_4) and is_in(add_offset((o_r, o_c)))]
     
-    return [addp(offset) for offset in neighbors_4 + neighbors_diag]
+    return [add_offset(offset) for offset in neighbors_4 + neighbors_diag]
 
 
 # ## Convertions
@@ -107,15 +107,16 @@ def rand_color():
 
 def show_lines(image, lines):
     image_with_lines = as_display(image)
-    for p1, p2 in lines:
-        cv2.line(image_with_lines, p1, p2, rand_color(), 1)
+    for point1, point2 in lines:
+        cv2.line(image_with_lines, point1, point2, rand_color(), 1)
         
     return image_with_lines
 
 def show_points(image, points, radius=2):
     image_with_circles = as_display(image)
+    randcolor = (100, randint(150, 200), randint(0, 255))
     for point in points:
-        cv2.circle(image_with_circles, point, radius, (100, randint(150, 200), randint(0, 255)), thickness=-1)
+        cv2.circle(image_with_circles, point, radius, randcolor, thickness=-1)
     return image_with_circles
 
 
@@ -124,12 +125,12 @@ def show_points(image, points, radius=2):
 # In[6]:
 
 
-text = cv2.threshold(src=cv2.imread("arabic.jpg", cv2.IMREAD_GRAYSCALE),
+TEXT = cv2.threshold(src=cv2.imread("arabic.jpg", cv2.IMREAD_GRAYSCALE),
                      thresh=200,
                      maxval=1,
                      type=cv2.THRESH_BINARY)[1]
 
-imshow_gray(text)
+imshow_gray(TEXT)
 
 
 # # Distance transform
@@ -137,8 +138,8 @@ imshow_gray(text)
 # In[7]:
 
 
-dist = cv2.distanceTransform(text, cv2.DIST_L2, cv2.DIST_MASK_5)
-imshow_gray(dist)
+DIST = cv2.distanceTransform(TEXT, cv2.DIST_L2, cv2.DIST_MASK_5)
+imshow_gray(DIST)
 
 
 # # Local maxima
@@ -149,28 +150,7 @@ imshow_gray(dist)
 # 
 # Possible arrangements:
 # 
-# \begin{equation}
-#  \begin{pmatrix}
-#  -   & - & -\\
-#  q_2 & p & q_1\\
-#  -   & - & -
-#  \end{pmatrix},
-#  \begin{pmatrix}
-#  -   & - & q_1\\
-#  -   & p & -\\
-#  q_2 & - & -
-#  \end{pmatrix},
-#  \begin{pmatrix}
-#  - & q_1 & -\\
-#  - & p & -\\
-#  - & q_2 & -
-#  \end{pmatrix},
-#  \begin{pmatrix}
-#  q_1 & - & -\\
-#  -   & p & -\\
-#  -   & - & q_2
-#  \end{pmatrix}
-# \end{equation}
+# $$\begin{pmatrix} - & - & -\\ q_2 & p & q_1\\ -   & - & -\end{pmatrix},\begin{pmatrix}-& - & q_1\\-   & p & -\\q_2 & - & -\end{pmatrix},\begin{pmatrix}- & q_1 & -\\- & p & -\\- & q_2 & -\end{pmatrix},\begin{pmatrix}q_1 & - & -\\-   & p & -\\-   & - & q_2\end{pmatrix}$$
 
 # In[8]:
 
@@ -197,9 +177,9 @@ def local_maxima(image):
 # In[9]:
 
 
-local_dist_maxima = cvclose(local_maxima(dist), cross(3))
+LOCAL_DIST_MAXIMA = cvclose(local_maxima(DIST), cross((3, 3)))
 
-imshow_gray(local_dist_maxima, figsize=(50, 50))
+imshow_gray(LOCAL_DIST_MAXIMA, figsize=(50, 50))
 
 
 # # Vertices
@@ -258,20 +238,20 @@ def neighbor_count(binary_matrix):
 
 def vertices(skeleton):
     vertex_pixels = uint8((neighbor_count(skeleton) > 2))
-    centeroids = cv2.connectedComponentsWithStats(cv2.dilate(vertex_pixels, cross(3)))[-1]
+    centeroids = cv2.connectedComponentsWithStats(cv2.dilate(vertex_pixels, cross((3, 3))))[-1]
     return [tuple(map(int, point)) for point in centeroids[1:-1]]
 
 
-local_max_verts = vertices(local_dist_maxima)
-figure(figsize=(50, 50))
-imshow(show_points(local_dist_maxima, local_max_verts, 2))
+LOCAL_MAX_VERTS = vertices(LOCAL_DIST_MAXIMA)
+imshow(show_points(LOCAL_DIST_MAXIMA, LOCAL_MAX_VERTS, 2),
+       figure=figure(figsize=(50, 50)))
 
 
 #  # Edges
 
 # ## BFS
 # 
-# [Another Cell](#m-adjacent)
+# [Another Cell](#m-adjacent-neighbors)
 
 # In[11]:
 
@@ -290,26 +270,26 @@ def edges_scan(search_mask, get_vert, start_points):
     edges = set()
     while start_points:
         start_vert = start_points.pop()
-        q = deque([(start_vert, start_vert)])
-        while q:
-            pixel, vert = q.popleft()
+        nverts = deque([(start_vert, start_vert)])
+        while nverts:
+            pixel, vert = nverts.popleft()
             next_neighbors = [(n_pixel, get_vert.get(n_pixel, vert))
                               for n_pixel in adjesent_m(pixel, search_mask)]
             
-            for (n_x, n_y), _ in next_neighbors:
-                search_mask[n_x, n_y] = 0
+            for (nextr, nextc), _ in next_neighbors:
+                search_mask[nextr, nextc] = 0
                 
-            q.extend(next_neighbors)
+            nverts.extend(next_neighbors)
             edges = edges.union((vert, n_vert) for _, n_vert in next_neighbors if vert != n_vert)
     
-    return [((x1, y1), (x2, y2)) for (y1, x1), (y2, x2) in edges]
+    return [((c1, r1), (c2, r2)) for (r1, c1), (r2, c2) in edges]
 
-row_index_verts = [(y, x) for x, y in local_max_verts]
+ROW_INDEX_VERTS = [(c, r) for r, c in LOCAL_MAX_VERTS]
 
-cvedges = edges_scan(
-    search_mask=local_dist_maxima.copy(),
-    get_vert=area_to_vert(row_index_verts, 5),
-    start_points=set(row_index_verts))
+EDGES = edges_scan(
+    search_mask=LOCAL_DIST_MAXIMA.copy(),
+    get_vert=area_to_vert(ROW_INDEX_VERTS, 5),
+    start_points=set(ROW_INDEX_VERTS))
 
-imshow(show_lines(text, cvedges), figure=figure(figsize=(50, 50)))
+imshow(show_lines(TEXT, EDGES), figure=figure(figsize=(50, 50)))
 
