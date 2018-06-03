@@ -87,7 +87,7 @@ def arrayuint8(rows):
 
 # ## Display
 
-# In[5]:
+# In[22]:
 
 
 def imshow_gray(image, figsize=(50, 50)):
@@ -105,10 +105,10 @@ def as_display(image):
 def rand_color():
     return (randint(150, 200), randint(150, 200), randint(0, 255))
 
-def show_lines(image, lines):
+def show_lines(image, lines, color):
     image_with_lines = as_display(image)
     for point1, point2 in lines:
-        cv2.line(image_with_lines, point1, point2, rand_color(), 1)
+        cv2.line(image_with_lines, point1, point2, color, 1)
         
     return image_with_lines
 
@@ -272,7 +272,7 @@ imshow(show_points(LOCAL_DIST_MAXIMA, LOCAL_MAX_VERTS, 2),
 #  # Edges
 
 # ## BFS
-# * We define set $C=$ [Centeroids](#Centeroids)
+# * We define set $C=$ [centeroids](#Centeroids)
 # * While $C\neq \emptyset$
 #   - Start from some $c \in C$ and set $C = C - \{c\}$
 #   - Perform a bfs scan on [local maxima](#Local-maxima)
@@ -289,7 +289,7 @@ def area_to_vert(verts, radius):
                                      range(y - radius, y + radius)))
 
 
-# In[20]:
+# In[24]:
 
 
 def edges_scan(search_mask, get_vert, start_points):
@@ -313,9 +313,10 @@ def edges_scan(search_mask, get_vert, start_points):
 ROW_INDEX_VERTS = [(c, r) for r, c in LOCAL_MAX_VERTS]
 
 EDGES = edges_scan(
-    search_mask=LOCAL_DIST_MAXIMA.copy(),#cv2.dilate(LOCAL_DIST_MAXIMA, circle(3)),
+    search_mask=LOCAL_DIST_MAXIMA.copy(),
     get_vert=area_to_vert(ROW_INDEX_VERTS, 5),
     start_points=set(ROW_INDEX_VERTS))
 
-imshow(show_lines(TEXT, EDGES), figure=figure(figsize=(50, 50)))
+imshow(show_lines(TEXT, EDGES, (150, 150, 0)),
+       figure=figure(figsize=(50, 50)))
 
