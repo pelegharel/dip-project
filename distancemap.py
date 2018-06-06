@@ -5,10 +5,11 @@
 
 
 from functools import reduce
-from operator import or_, add
+from itertools import repeat, product
+from operator import or_, add, sub
 from random import randint
-from itertools import product
 from collections import deque
+from math import atan2, degrees
 
 import cv2
 from matplotlib.pyplot import imshow, figure
@@ -87,7 +88,7 @@ def arrayuint8(rows):
 
 # ## Display
 
-# In[22]:
+# In[5]:
 
 
 def imshow_gray(image, figsize=(50, 50)):
@@ -105,9 +106,9 @@ def as_display(image):
 def rand_color():
     return (randint(150, 200), randint(150, 200), randint(0, 255))
 
-def show_lines(image, lines, color):
+def show_lines(image, lines, colors):
     image_with_lines = as_display(image)
-    for point1, point2 in lines:
+    for ((point1, point2), color) in zip(lines, colors):
         cv2.line(image_with_lines, point1, point2, color, 1)
         
     return image_with_lines
@@ -138,10 +139,10 @@ imshow_gray(TEXT)
 # # Erode
 # We erode input to emphasize words
 
-# In[19]:
+# In[7]:
 
 
-TEXT_ERODE=cv2.erode(TEXT, circle(3))
+TEXT_ERODE = cv2.erode(TEXT, circle(3))
 imshow_gray(TEXT_ERODE)
 
 
@@ -156,9 +157,7 @@ imshow_gray(DIST)
 
 # # Local maxima
 # 
-# Each pixel $p$ is consider local maximum if $p > q_1 \wedge p> q_2$
-# 
-# for some $q_1, q_1$ where $q_1, q_2$ are opposite pixels in the 8-member inviroment of $p$
+# Each pixel $p$ is consider local maximum if $p > q_1 \wedge p> q_2$ where $q_1, q_2$ are opposite pixels in the 8-member inviroment of $p$
 
 # In[9]:
 
@@ -289,7 +288,7 @@ def area_to_vert(verts, radius):
                                      range(y - radius, y + radius)))
 
 
-# In[24]:
+# In[14]:
 
 
 def edges_scan(search_mask, get_vert, start_points):
@@ -317,6 +316,32 @@ EDGES = edges_scan(
     get_vert=area_to_vert(ROW_INDEX_VERTS, 5),
     start_points=set(ROW_INDEX_VERTS))
 
-imshow(show_lines(TEXT, EDGES, (150, 150, 0)),
+imshow(show_lines(TEXT, EDGES, repeat((150, 150, 0))),
+       figure=figure(figsize=(50, 50)))
+
+
+# # Edge classification
+# 
+# Edge classfiied as row edge or as column dedge depandes on the angle of the edge vector.
+# 
+# * Given an edge $e=(p_1,p_2)$
+# * We angle $-180^{\circ} \leq \varphi \leq 180^{\circ}$ (in degrees) as the angle of the vector $\vec{p_1p_2}$
+# * For some threshold $t$ we define the class as
+#   
+#   $\textrm{is_row}=\frac{\left|90^{\circ} -|\varphi|\right|}{90^{\circ}} > t$
+
+# In[24]:
+
+
+def classify(edges, thresh):
+    diffs = [tuple(map(sub, p1, p2)) for p1, p2 in edges]
+    probs = [abs(degrees(abs(atan2(p2, p1))) - 90) / 90
+             for p1, p2 in diffs]
+    return [prob > thresh for prob in probs]
+
+imshow(show_lines(TEXT,
+                  EDGES,
+                  [(150, 150, 0) if x else (0, 150, 150)
+                   for x in classify(EDGES, 0.3)]),
        figure=figure(figsize=(50, 50)))
 
