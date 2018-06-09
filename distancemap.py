@@ -8,13 +8,14 @@ from functools import reduce
 from itertools import repeat, product
 from operator import or_, add, sub
 from random import randint
-from collections import deque
+from collections import deque, defaultdict
 from math import atan2, degrees
+from enum import Enum
 
 import cv2
 from matplotlib.pyplot import imshow, figure
 import numpy as np
-from numpy import array, flip
+from numpy import array, flip, concatenate, zeros_like
 
 # pylint: disable=undefined-variable
 get_ipython().run_line_magic('matplotlib', 'inline')
@@ -33,6 +34,9 @@ def circle(size):
 
 def cvclose(image, kernel):
     return cv2.erode(cv2.dilate(image, kernel), kernel)
+
+def constant_border(image, length, value):
+    return cv2.copyMakeBorder(image, length, length, length, length, cv2.BORDER_CONSTANT, value=value)
 
 
 # # m-adjacent neighbors
@@ -136,13 +140,14 @@ TEXT = cv2.threshold(src=cv2.imread("arabic.jpg", cv2.IMREAD_GRAYSCALE),
 imshow_gray(TEXT)
 
 
-# # Erode
-# We erode input to emphasize words
+# # Ducument preprocessing
+# We erode input to emphasize words and add a black border to force graph edges at picture sides
 
 # In[7]:
 
 
-TEXT_ERODE = cv2.erode(TEXT, circle(3))
+TEXT_SHOW = constant_border(TEXT, 10, 1)
+TEXT_ERODE = cv2.erode(constant_border(TEXT, 10, 0), circle(3))
 imshow_gray(TEXT_ERODE)
 
 
@@ -163,28 +168,37 @@ imshow_gray(DIST)
 
 
 def local_maxima(image):
-    horizontal = arrayuint8(
-        [[0, 0, 0],
-         [1, 0, 1],
-         [0, 0, 0]])
+    
+    horizontals = list(map(arrayuint8, [
+        [
+            [0, 0, 1, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0]
+        ],
+        [
+            [0, 1, 0, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 0]
+        ],
+    ]))
+    
+    horizontals_fliped = [flip(mat, 1) for mat in horizontals]
+    
 
-    diagonal = arrayuint8(
-        [[1, 0, 0],
-         [0, 0, 0],
-         [0, 0, 1]])
-
-    kernels = [horizontal, horizontal.T, diagonal, flip(diagonal, 1)]
+    kernels = [mat
+               for matrices in [(mat, mat.T) for mat in horizontals + horizontals_fliped]
+               for mat in matrices]
 
     local_maximas = (image > cv2.dilate(image, kernel)
                      for kernel in kernels)
 
     return uint8(reduce(or_, local_maximas))
 
-
-# In[10]:
-
-
-LOCAL_DIST_MAXIMA = cvclose(local_maxima(DIST), cross((3, 3)))
+LOCAL_DIST_MAXIMA = local_maxima(DIST)
 
 imshow_gray(LOCAL_DIST_MAXIMA, figsize=(50, 50))
 
@@ -196,49 +210,63 @@ imshow_gray(LOCAL_DIST_MAXIMA, figsize=(50, 50))
 # ## Neighbor counting
 # 1. For a pixel $p$ it is defined it has a neighbors in a direction $d$ , if it has non-zero pixels in that direction.
 # 2. We count of number of directions a pixel has neighbors on. we get a number in $0\dots4$.
-#    
+# 
 #    e.g, a pixel with one neighbor (left) and a pixel with two neighbors(right):
-#    
+# 
 #    $\begin{pmatrix}0&0&0&0&0\\0&0&0&0&0\\0&0&\textbf{p}&0&0\\0&0&1&0&0\\0&0&1&0&0 \end{pmatrix}$
 #    $\qquad$
 #    $\begin{pmatrix}0&0&0&0&0\\0&0&0&0&0\\0&0&\textbf{p}&1&1\\0&0&1&0&0\\0&0&1&0&0 \end{pmatrix}$
 
-# In[11]:
+# In[10]:
 
 
 def rotations(matrix):
     return [matrix, matrix.T, flip(matrix, 0), flip(matrix.T, 1)]
 
 def neighbor_count(binary_matrix):
-    down = arrayuint8(
-        [[0, 0, 0, 0, 0],
-         [0, 0, 0, 0, 0],
-         [0, 0, 1, 0, 0],
-         [0, 0, 1, 0, 0],
-         [0, 0, 1, 0, 0]])
+    def complete_down(mat):
+        matu8 = arrayuint8(mat)
+        return concatenate((zeros_like(matu8[:-1, :]), matu8))
 
-    down_right = arrayuint8(
-        [[0, 0, 0, 0, 0],
-         [0, 0, 0, 0, 0],
-         [0, 0, 1, 0, 0],
-         [0, 0, 1, 0, 0],
-         [0, 0, 0, 1, 0]])
+    def complete_right(mat):
+        matu8 = arrayuint8(mat)
+        return concatenate((zeros_like(matu8[:, :-1]), matu8), axis=1)
 
-    down_up_right = arrayuint8(
-        [[0, 0, 0, 0, 0],
-         [0, 0, 0, 0, 0],
-         [0, 0, 1, 0, 0],
-         [0, 0, 0, 1, 0],
-         [0, 0, 0, 1, 0]])
+    down_side = list(map(complete_down, [
+        [
+            [0, 1, 0],
+            [0, 1, 0],
+            [0, 1, 0],
+            [0, 1, 0],
+        ],
+        [
+            [0, 1, 0],
+            [0, 1, 0],
+            [0, 1, 0],
+            [0, 0, 1],
+        ],
+        [
+            [0, 1, 0],
+            [0, 1, 0],
+            [0, 1, 0],
+            [1, 0, 0],
+        ],
+        
+    ]))
 
+    up_side = (flip(mat, 0) for mat in down_side)
 
-    sides = zip(*map(rotations, (down,
-                                 down_right,
-                                 flip(down_right, 1),
-                                 down_up_right,
-                                 flip(down_up_right, 1)
-                                )))
+    right_side = list(map(complete_right, [
+        [
+            [0, 0, 0, 0],
+            [1, 1, 1, 1],
+            [0, 0, 0, 0],
+        ],
+    ]))
 
+    left_side = (flip(mat, 1) for mat in right_side)
+    
+    sides = (down_side, up_side, right_side, left_side)
     neighbors = [uint8(reduce(or_, (cv2.erode(binary_matrix, kernel)
                                     for kernel in kernels)))
                  for kernels in sides]
@@ -252,21 +280,29 @@ def neighbor_count(binary_matrix):
     return res
 
 
+imshow(10 * uint8(neighbor_count(LOCAL_DIST_MAXIMA))  + 
+       LOCAL_DIST_MAXIMA,
+       figure=figure(figsize=(50, 50)))
+
+
 # ## Centeroids
 # 1. Let $FM$ be pixels $p$ with [neighbor count](#Neighbor-counting) $n(p) > 2$ 
 # 2. Graph vertices are defined as the centeroids of connected components of $FM$ 
 
-# In[12]:
+# In[11]:
 
 
 def vertices(skeleton):
-    vertex_pixels = uint8((neighbor_count(skeleton) > 2))
-    centeroids = cv2.connectedComponentsWithStats(cv2.dilate(vertex_pixels, cross((3, 3))))[-1]
+    vertex_pixels = uint8(neighbor_count(skeleton) > 2)
+    centeroids = cv2.connectedComponentsWithStats(
+        vertex_pixels,
+        connectivity=4
+    )[-1]
     return [tuple(map(int, point)) for point in centeroids[1:-1]]
 
 
 LOCAL_MAX_VERTS = vertices(LOCAL_DIST_MAXIMA)
-imshow(show_points(LOCAL_DIST_MAXIMA, LOCAL_MAX_VERTS, 2),
+imshow(show_points(LOCAL_DIST_MAXIMA, LOCAL_MAX_VERTS, 3),
        figure=figure(figsize=(50, 50)))
 
 
@@ -280,7 +316,7 @@ imshow(show_points(LOCAL_DIST_MAXIMA, LOCAL_MAX_VERTS, 2),
 #   - Define current graph vertice as closest vertice at the curr pixels $p$ rectangle enviroment of some $r$
 #   - If found vertice is different than pervious found vertice in scan, we add an edge connecting curr vertice to found one
 
-# In[13]:
+# In[12]:
 
 
 def area_to_vert(verts, radius):
@@ -290,35 +326,44 @@ def area_to_vert(verts, radius):
                                      range(y - radius, y + radius)))
 
 
-# In[14]:
+# In[13]:
 
 
-def edges_scan(search_mask, get_vert, start_points):
-    edges = set()
-    while start_points:
-        start_vert = start_points.pop()
-        nverts = deque([(start_vert, start_vert)])
-        while nverts:
-            pixel, vert = nverts.popleft()
-            next_neighbors = [(n_pixel, get_vert.get(n_pixel, vert))
-                              for n_pixel in adjesent_m(pixel, search_mask)]
-            
-            for (nextr, nextc), _ in next_neighbors:
-                search_mask[nextr, nextc] = 0
-                
-            nverts.extend(next_neighbors)
-            edges = edges.union((vert, n_vert) for _, n_vert in next_neighbors if vert != n_vert)
-    
-    return [((c1, r1), (c2, r2)) for (r1, c1), (r2, c2) in edges]
+def build_graph(search_mask, covermap, verts):
+    unvisited_vertices = verts.copy()
+
+    graph = defaultdict(set)
+
+    while unvisited_vertices:
+        unvisited = search_mask.copy()
+        start = unvisited_vertices.pop()
+        bfs_q = deque([start])
+        while bfs_q:
+            pos = bfs_q.popleft()
+            vert = covermap.get(pos, start)
+
+            if start == vert:
+                nextvs = adjesent_m(pos, unvisited)
+                for r, c in nextvs:
+                    unvisited[r, c] = 0
+                bfs_q.extend(nextvs)
+            else:
+                graph[start].add(vert)
+                graph[vert].add(start)
+    return graph
+
 
 ROW_INDEX_VERTS = [(c, r) for r, c in LOCAL_MAX_VERTS]
+GRAPH = build_graph(
+    search_mask=LOCAL_DIST_MAXIMA,
+    covermap=area_to_vert(ROW_INDEX_VERTS, 4),
+    verts=set(ROW_INDEX_VERTS))
 
-EDGES = edges_scan(
-    search_mask=LOCAL_DIST_MAXIMA.copy(),
-    get_vert=area_to_vert(ROW_INDEX_VERTS, 5),
-    start_points=set(ROW_INDEX_VERTS))
+EDGES = set(tuple(sorted(((c1, r1), (c2, r2))))
+            for (r1, c1), connecetd in GRAPH.items()
+            for (r2, c2) in connecetd)
 
-imshow(show_lines(TEXT, EDGES, repeat((150, 150, 0))),
+imshow(show_lines(TEXT_SHOW, EDGES, repeat((150, 150, 0))),
        figure=figure(figsize=(50, 50)))
 
 
@@ -332,18 +377,22 @@ imshow(show_lines(TEXT, EDGES, repeat((150, 150, 0))),
 #   
 #   $\textrm{is_row}=\frac{\left|90^{\circ} -|\varphi|\right|}{90^{\circ}} > t$
 
-# In[24]:
+# In[14]:
 
+
+class EdgeType(Enum):
+    ROW = (150, 150, 0)
+    COL = (0, 150, 150)
 
 def classify(edges, thresh):
     diffs = [tuple(map(sub, p1, p2)) for p1, p2 in edges]
     probs = [abs(degrees(abs(atan2(p2, p1))) - 90) / 90
              for p1, p2 in diffs]
-    return [prob > thresh for prob in probs]
+    return [EdgeType.ROW if prob > thresh else EdgeType.COL
+            for prob in probs]
 
-imshow(show_lines(TEXT,
+imshow(show_lines(TEXT_SHOW,
                   EDGES,
-                  [(150, 150, 0) if x else (0, 150, 150)
-                   for x in classify(EDGES, 0.3)]),
+                  [x.value for x in classify(EDGES, 0.3)]),
        figure=figure(figsize=(50, 50)))
 
