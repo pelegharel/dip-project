@@ -6,11 +6,9 @@
 
 from functools import reduce
 from itertools import repeat, product
-from operator import or_, add, sub
+from operator import or_, add
 from random import randint
 from collections import deque, defaultdict
-from math import atan2, degrees
-from enum import Enum
 
 import cv2
 from matplotlib.pyplot import imshow, figure
@@ -353,46 +351,40 @@ def build_graph(search_mask, covermap, verts):
     return graph
 
 
+def edges(graph):
+    return set(tuple(sorted(((c1, r1), (c2, r2))))
+               for (r1, c1), connecetd in graph.items()
+               for (r2, c2) in connecetd)
+
 ROW_INDEX_VERTS = [(c, r) for r, c in LOCAL_MAX_VERTS]
 GRAPH = build_graph(
     search_mask=LOCAL_DIST_MAXIMA,
     covermap=area_to_vert(ROW_INDEX_VERTS, 4),
     verts=set(ROW_INDEX_VERTS))
 
-EDGES = set(tuple(sorted(((c1, r1), (c2, r2))))
-            for (r1, c1), connecetd in GRAPH.items()
-            for (r2, c2) in connecetd)
-
-imshow(show_lines(TEXT_SHOW, EDGES, repeat((150, 150, 0))),
+imshow(show_lines(TEXT_SHOW, edges(GRAPH), repeat((150, 150, 0))),
        figure=figure(figsize=(50, 50)))
 
 
-# # Edge classification
-# 
-# Edge classfiied as row edge or as column dedge depandes on the angle of the edge vector.
-# 
-# * Given an edge $e=(p_1,p_2)$
-# * We angle $-180^{\circ} \leq \varphi \leq 180^{\circ}$ (in degrees) as the angle of the vector $\vec{p_1p_2}$
-# * For some threshold $t$ we define the class as
-#   
-#   $\textrm{is_row}=\frac{\left|90^{\circ} -|\varphi|\right|}{90^{\circ}} > t$
+# # Remove leafs
 
 # In[14]:
 
 
-class EdgeType(Enum):
-    ROW = (150, 150, 0)
-    COL = (0, 150, 150)
+def clear_leafs(graph):
+    while True:
+        leafs = set([v for v, connected in graph.items() if len(connected) <= 1])
 
-def classify(edges, thresh):
-    diffs = [tuple(map(sub, p1, p2)) for p1, p2 in edges]
-    probs = [abs(degrees(abs(atan2(p2, p1))) - 90) / 90
-             for p1, p2 in diffs]
-    return [EdgeType.ROW if prob > thresh else EdgeType.COL
-            for prob in probs]
+        if not leafs:
+            return
 
-imshow(show_lines(TEXT_SHOW,
-                  EDGES,
-                  [x.value for x in classify(EDGES, 0.3)]),
+        for leaf in leafs:
+            graph.pop(leaf)
+
+        graph.update((vert, neighbors - leafs)
+                     for vert, neighbors in graph.items())
+
+clear_leafs(GRAPH)
+imshow(show_lines(TEXT_SHOW, edges(GRAPH), repeat((100, 150, 0))),
        figure=figure(figsize=(50, 50)))
 
