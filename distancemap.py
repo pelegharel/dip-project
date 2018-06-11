@@ -13,7 +13,7 @@ from collections import deque, defaultdict
 import cv2
 from matplotlib.pyplot import imshow, figure
 import numpy as np
-from numpy import array, flip, concatenate, zeros_like
+from numpy import array, flip, zeros_like
 
 # pylint: disable=undefined-variable
 get_ipython().run_line_magic('matplotlib', 'inline')
@@ -218,68 +218,67 @@ imshow_gray(LOCAL_DIST_MAXIMA, figsize=(50, 50))
 # In[10]:
 
 
-def rotations(matrix):
-    return [matrix, matrix.T, flip(matrix, 0), flip(matrix.T, 1)]
+def rotations(mat):
+    return (mat, mat.T, flip(mat, 0), flip(mat.T, 1))
 
-def neighbor_count(binary_matrix):
-    def complete_down(mat):
-        matu8 = arrayuint8(mat)
-        return concatenate((zeros_like(matu8[:-1, :]), matu8))
-
-    def complete_right(mat):
-        matu8 = arrayuint8(mat)
-        return concatenate((zeros_like(matu8[:, :-1]), matu8), axis=1)
-
-    down_side = list(map(complete_down, [
+def vertice_candidates(binary):
+    junctions = map(arrayuint8, [
         [
-            [0, 1, 0],
-            [0, 1, 0],
-            [0, 1, 0],
-            [0, 1, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1],
+            [0, 0, 1, 0, 0],
+            [0, 0, 1, 0, 0],
+            [0, 0, 1, 0, 0],
+            [0, 0, 1, 0, 0],
         ],
         [
-            [0, 1, 0],
-            [0, 1, 0],
-            [0, 1, 0],
-            [0, 0, 1],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0],
+            [1, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0],
+            [0, 0, 1, 1, 1],
+            [0, 0, 1, 0, 0],
+            [0, 0, 1, 0, 0],
+            [0, 0, 1, 0, 0],
+            [0, 0, 1, 0, 0],
         ],
         [
-            [0, 1, 0],
-            [0, 1, 0],
-            [0, 1, 0],
-            [1, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0],
+            [1, 0, 0, 0, 1],
+            [0, 1, 0, 1, 0],
+            [0, 0, 1, 1, 0],
+            [0, 0, 1, 0, 0],
+            [0, 0, 1, 0, 0],
+            [0, 0, 1, 0, 0],
+            [0, 0, 1, 0, 0],
         ],
-        
-    ]))
-
-    up_side = (flip(mat, 0) for mat in down_side)
-
-    right_side = list(map(complete_right, [
         [
-            [0, 0, 0, 0],
-            [1, 1, 1, 1],
-            [0, 0, 0, 0],
-        ],
-    ]))
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0],
+            [1, 1, 1, 1, 1],
+            [1, 0, 1, 0, 1],
+            [0, 0, 1, 0, 0],
+            [0, 0, 1, 0, 0],
+        ]
+    ])
 
-    left_side = (flip(mat, 1) for mat in right_side)
-    
-    sides = (down_side, up_side, right_side, left_side)
-    neighbors = [uint8(reduce(or_, (cv2.erode(binary_matrix, kernel)
-                                    for kernel in kernels)))
-                 for kernels in sides]
+    rotated_mats = (rotated
+                    for mat in junctions
+                    for rotated in rotations(mat))
 
-    res = reduce(add, neighbors)
+    def filter_junction(junction):
+        return cv2.erode(binary, junction)
 
-    res[0, :] = 0
-    res[:, 0] = 0
-    res[-1, :] = 0
-    res[:, -1] = 0
-    return res
+    return reduce(or_, map(filter_junction, rotated_mats), zeros_like(binary))
 
-
-imshow(10 * uint8(neighbor_count(LOCAL_DIST_MAXIMA))  + 
-       LOCAL_DIST_MAXIMA,
+imshow(LOCAL_DIST_MAXIMA + vertice_candidates(LOCAL_DIST_MAXIMA),
        figure=figure(figsize=(50, 50)))
 
 
@@ -291,7 +290,7 @@ imshow(10 * uint8(neighbor_count(LOCAL_DIST_MAXIMA))  +
 
 
 def vertices(skeleton):
-    vertex_pixels = uint8(neighbor_count(skeleton) > 2)
+    vertex_pixels = vertice_candidates(skeleton)
     centeroids = cv2.connectedComponentsWithStats(
         vertex_pixels,
         connectivity=4
