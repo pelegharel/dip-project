@@ -24,10 +24,11 @@ from numpy import (array,
                    sign)
 from numpy.linalg import norm
 
-get_ipython().run_line_magic('matplotlib', 'inline')
 from matplotlib.pyplot import imshow, figure, subplots
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
 from mpl_toolkits.mplot3d.axes3d import Axes3D
+# pylint: disable=undefined-variable
+get_ipython().run_line_magic('matplotlib', 'inline')
 
 
 # ## Morphing
@@ -101,7 +102,7 @@ def arrayuint8(rows):
 
 # ## Display
 
-# In[5]:
+# In[6]:
 
 
 def as_display(image):
@@ -132,35 +133,36 @@ def show_points(image, points, radius=2):
         cv2.circle(image_with_circles, point, radius, randcolor, thickness=-1)
     return image_with_circles
 
-def figure_image(figsize=(15,15), **kwargs):
+def figure_image(figsize=(15, 15), **kwargs):
     return figure(figsize=figsize, **kwargs)
 
 def plot_lines_3d(lines, colors, **kwargs):
-    fig, ax = subplots(subplot_kw={'projection': '3d'}, **kwargs)
-    ax.set_zlim3d(0,2)
+    _, axes = subplots(subplot_kw={'projection': '3d'}, **kwargs)
+    axes.set_zlim3d(0, 2)
     for (x, y, z), color in zip(lines, colors):
-        ax.plot(x, y, z, color=color)
-    return fig
+        axes.plot(x, y, z, color=color)
 
 def plot_surface(shape, z):
-    fig = figure(figsize=(15,7))
-    ax = fig.gca(projection='3d')
+    fig = figure(figsize=(15, 7))
+    axes = fig.gca(projection='3d')
 
-    xs, ys = np.meshgrid(*(arange(0, coord, 1) for coord in shape))
-    zs = z(xs, ys)
-    ax.plot_surface(xs, ys, zs, cmap="coolwarm",
-                    linewidth=0, antialiased=True)
+    xgrid, ygrid = np.meshgrid(*(arange(0, coord, 1) for coord in shape))
+    zgrid = z(xgrid, ygrid)
+    axes.plot_surface(xgrid, ygrid, zgrid,
+                      cmap="coolwarm",
+                      linewidth=0,
+                      antialiased=True)
 
-    ax.set_zlim3d(0,2)
-    ax.zaxis.set_major_locator(LinearLocator(10))
-    ax.zaxis.set_major_formatter(FormatStrFormatter('%.02f'))
+    axes.set_zlim3d(0, 2)
+    axes.zaxis.set_major_locator(LinearLocator(10))
+    axes.zaxis.set_major_formatter(FormatStrFormatter('%.02f'))
 
 
 # # Input
 # 
 # We get a text document as input
 
-# In[6]:
+# In[7]:
 
 
 TEXT = cv2.threshold(src=cv2.imread("arabic.jpg", cv2.IMREAD_GRAYSCALE),
@@ -174,7 +176,7 @@ imshow(TEXT, cmap='gray', figure=figure_image())
 # # Ducument preprocessing
 # We erode input to emphasize words and add a black border to force graph edges at picture sides
 
-# In[7]:
+# In[8]:
 
 
 TEXT_SHOW = constant_border(TEXT, 10, 1)
@@ -184,7 +186,7 @@ imshow(TEXT_ERODE, cmap='gray', figure=figure_image())
 
 # # Distance transform
 
-# In[8]:
+# In[9]:
 
 
 DIST = cv2.distanceTransform(TEXT_ERODE, cv2.DIST_L2, cv2.DIST_MASK_5)
@@ -195,7 +197,7 @@ imshow(DIST, cmap='gray', figure=figure_image())
 # 
 # Each pixel $p$ is consider local maximum if $p > q_1 \wedge p> q_2$ where $q_1, q_2$ are opposite pixels in the 8-member inviroment of $p$
 
-# In[9]:
+# In[10]:
 
 
 def local_maxima(image):
@@ -251,7 +253,7 @@ imshow(LOCAL_DIST_MAXIMA, cmap='gray', figure=figure_image())
 # 
 # If the folowwing shape exists in local maxima (meaning all if the shape pixels are $1$), the pixel $p$ is a junciton pixel.
 
-# In[10]:
+# In[11]:
 
 
 def rotations(mat):
@@ -343,7 +345,7 @@ imshow(LOCAL_DIST_MAXIMA + mark_junction_pixels(LOCAL_DIST_MAXIMA),
 # ## Vertices
 # We define vertices as centeroids of each connected component of juntion pixels
 
-# In[11]:
+# In[12]:
 
 
 def extract_vertices(junction_pixels):
@@ -369,7 +371,7 @@ imshow(show_points(LOCAL_DIST_MAXIMA, LOCAL_MAX_VERTS, 3),
 #   - Perform a $BFS$ scan on [local maxima](#Local-maxima) starting from $v$ iterating m-adjecent neighbors
 #   - Add all found neighbors of $v$ into the graph as vonnected to $v$
 
-# In[12]:
+# In[13]:
 
 
 def area_to_vert(verts, radius):
@@ -381,7 +383,7 @@ def area_to_vert(verts, radius):
 def pixel_vert(pos, verts, labels_map, area_map):
     row, col = pos
     label = labels_map[row, col]
-    if 0 <=  label < len(verts):
+    if 0 <= label < len(verts):
         return verts[label]
     else:
         return area_map.get(pos)
@@ -460,7 +462,7 @@ imshow(show_lines(TEXT_SHOW, graph_edges(GRAPH), repeat((150, 150, 0))),
 # 
 # Until we get a graph where all it's vertices have at least 3 neighbors, we rebuild the graph by find all 3 connected neighbors for vertice with at least 3 neighbors.
 
-# In[13]:
+# In[14]:
 
 
 def graph_connected(start, graph):
@@ -508,21 +510,21 @@ imshow(show_lines(TEXT_SHOW, graph_edges(GRAPH_3), repeat((100, 50, 150))),
 # 
 # The juntion grade is the second closest angle to $90^{\circ}$ out of $\theta_1\dots \theta_3$ (for a perfect T juntion, we expect angles $90^{\circ}, 90^{\circ}, 180^{\circ}$)
 
-# In[14]:
+# In[15]:
 
 
 def vcos(v1, v2):
     return dot(v1, v2) / (norm(v1) * norm(v2))
 
 def t_grade(v, vs):
-    if(len(vs) != 3):
+    if len(vs) != 3:
         return (0, None)
 
     vectors = (subtract(v2, v) for v2 in vs)
-    cosines = (((v1, v2), abs(vcos(v1, v2))) for v1,v2 in combinations(vectors, 2))
+    cosines = (((v1, v2), abs(vcos(v1, v2))) for v1, v2 in combinations(vectors, 2))
     sorted_grades = sorted(cosines, key=itemgetter(1))
 
-    sorted_pairs = [tuple(map(tuple, v)) for v,_ in sorted_grades]
+    sorted_pairs = [tuple(map(tuple, v)) for v, _ in sorted_grades]
 
     linear_grade = 1 - sorted_grades[1][1]
     graded_vec = reduce(set.intersection, map(set, sorted_pairs[:2])).pop()
@@ -536,7 +538,7 @@ def t_grade(v, vs):
     return (linear_grade ** 2, graded_vec)
 
 
-# In[15]:
+# In[16]:
 
 
 def plot_t_juncitons(edges, t_grades):
@@ -548,9 +550,9 @@ def plot_t_juncitons(edges, t_grades):
         chain(graph_lines_3D,
               tgrades_lines_3d),
         chain(repeat("gray", len(graph_lines_3D)),
-              ((grade, 0 ,1 - grade, 0.5 + grade / 2)
+              ((grade, 0, 1 - grade, 0.5 + grade / 2)
                for _, grade in t_grades)),
-        figsize=(15,7))
+        figsize=(15, 7))
 
 plot_t_juncitons(graph_edges(GRAPH_3),
                  ((v, t_grade(v, vs)[0]) for v, vs in GRAPH_3.items()))
@@ -559,7 +561,7 @@ plot_t_juncitons(graph_edges(GRAPH_3),
 # ## Center pixels
 # we want to eliminate pixels at the edges of the pictures therefore we use a fuzzy set $Center$
 
-# In[16]:
+# In[17]:
 
 
 def center_fuzzy_set(x, y, shape):
@@ -581,7 +583,7 @@ plot_surface(TEXT_SHOW.shape, partial(center_fuzzy_set, shape=TEXT_SHOW.shape))
 
 # We are looking for $v$ where $v\in \textrm{T-juntion}\wedge v \in \textrm{Center-pixels}$ (performed in fuzzy sets logic)
 
-# In[17]:
+# In[18]:
 
 
 def centered_t_grades(graph, shape):
@@ -590,10 +592,10 @@ def centered_t_grades(graph, shape):
             for (r, c), (grade, grade_vec) in t_grades]
 
 plot_t_juncitons(graph_edges(GRAPH_3),
-                 map(itemgetter(0,1), centered_t_grades(GRAPH_3, TEXT_SHOW.shape)))
+                 map(itemgetter(0, 1), centered_t_grades(GRAPH_3, TEXT_SHOW.shape)))
 
 
-# In[18]:
+# In[19]:
 
 
 def direction_vector(t_grades):
@@ -605,7 +607,7 @@ def evaluate_direction(graph, image_shape):
     return direction_vector(centered_t_grades(graph, image_shape))
 
 
-# In[19]:
+# In[20]:
 
 
 class EdgeType(Enum):
@@ -613,8 +615,8 @@ class EdgeType(Enum):
     LINK = (0, 255, 0)
 
 def classify_edges(graph, direction):
-    return [((p1,p2), EdgeType.BRIDGE if abs(vcos(subtract(p2, p1), direction)) > 0.5 else EdgeType.LINK)
-            for p1,p2 in graph_edges(graph)]
+    return [((p1, p2), EdgeType.BRIDGE if abs(vcos(subtract(p2, p1), direction)) > 0.5 else EdgeType.LINK)
+            for p1, p2 in graph_edges(graph)]
 
 CLASSIFIED = classify_edges(GRAPH_3, evaluate_direction(GRAPH_3, TEXT_SHOW.shape))
 
