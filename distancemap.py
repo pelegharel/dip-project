@@ -6,17 +6,27 @@
 
 from functools import reduce, partial
 from itertools import repeat, product, combinations, chain
-from operator import or_, add
+from operator import or_, add, itemgetter, attrgetter
 from random import randint
 from collections import deque, defaultdict
+from enum import Enum
 
 import cv2
 import numpy as np
-from numpy import array, flip, zeros_like, dot, subtract
+from numpy import (array,
+                   flip,
+                   zeros_like,
+                   dot,
+                   subtract,
+                   multiply,
+                   divide,
+                   arange,
+                   sign)
 from numpy.linalg import norm
 
 get_ipython().run_line_magic('matplotlib', 'inline')
 from matplotlib.pyplot import imshow, figure, subplots
+from matplotlib.ticker import LinearLocator, FormatStrFormatter
 from mpl_toolkits.mplot3d.axes3d import Axes3D
 
 
@@ -126,10 +136,24 @@ def figure_image(figsize=(15,15), **kwargs):
     return figure(figsize=figsize, **kwargs)
 
 def plot_lines_3d(lines, colors, **kwargs):
-    _, ax = subplots(subplot_kw={'projection': '3d'}, **kwargs)
+    fig, ax = subplots(subplot_kw={'projection': '3d'}, **kwargs)
     ax.set_zlim3d(0,2)
     for (x, y, z), color in zip(lines, colors):
         ax.plot(x, y, z, color=color)
+    return fig
+
+def plot_surface(shape, z):
+    fig = figure(figsize=(15,7))
+    ax = fig.gca(projection='3d')
+
+    xs, ys = np.meshgrid(*(arange(0, coord, 1) for coord in shape))
+    zs = z(xs, ys)
+    ax.plot_surface(xs, ys, zs, cmap="coolwarm",
+                    linewidth=0, antialiased=True)
+
+    ax.set_zlim3d(0,2)
+    ax.zaxis.set_major_locator(LinearLocator(10))
+    ax.zaxis.set_major_formatter(FormatStrFormatter('%.02f'))
 
 
 # # Input
@@ -484,7 +508,7 @@ imshow(show_lines(TEXT_SHOW, graph_edges(GRAPH_3), repeat((100, 50, 150))),
 # 
 # The juntion grade is the second closest angle to $90^{\circ}$ out of $\theta_1\dots \theta_3$ (for a perfect T juntion, we expect angles $90^{\circ}, 90^{\circ}, 180^{\circ}$)
 
-# In[27]:
+# In[14]:
 
 
 def vcos(v1, v2):
@@ -492,17 +516,27 @@ def vcos(v1, v2):
 
 def t_grade(v, vs):
     if(len(vs) != 3):
-        return 0
+        return (0, None)
 
     vectors = (subtract(v2, v) for v2 in vs)
-    cosines = (abs(vcos(v1, v2)) for v1,v2 in combinations(vectors, 2))
-    linear_grade = 1 - sorted(cosines)[1]
-    return linear_grade ** 2
+    cosines = (((v1, v2), abs(vcos(v1, v2))) for v1,v2 in combinations(vectors, 2))
+    sorted_grades = sorted(cosines, key=itemgetter(1))
 
-T_GRADES = list((v, t_grade(v, vs)) for v, vs in GRAPH_3.items())
+    sorted_pairs = [tuple(map(tuple, v)) for v,_ in sorted_grades]
+
+    linear_grade = 1 - sorted_grades[1][1]
+    graded_vec = reduce(set.intersection, map(set, sorted_pairs[:2])).pop()
+
+    if graded_vec[0]:
+        graded_vec = multiply(sign(graded_vec[0]), graded_vec)
+    elif graded_vec[1]:
+        graded_vec = multiply(sign(graded_vec[1]), graded_vec)
+
+    graded_vec = divide(graded_vec, norm(graded_vec))
+    return (linear_grade ** 2, graded_vec)
 
 
-# In[37]:
+# In[15]:
 
 
 def plot_t_juncitons(edges, t_grades):
@@ -518,8 +552,74 @@ def plot_t_juncitons(edges, t_grades):
                for _, grade in t_grades)),
         figsize=(15,7))
 
-plot_t_juncitons(graph_edges(GRAPH_3), T_GRADES)
+plot_t_juncitons(graph_edges(GRAPH_3),
+                 ((v, t_grade(v, vs)[0]) for v, vs in GRAPH_3.items()))
 
 
 # ## Center pixels
-# we want to eliminate pixels at the edges of the pictures
+# we want to eliminate pixels at the edges of the pictures therefore we use a fuzzy set $Center$
+
+# In[16]:
+
+
+def center_fuzzy_set(x, y, shape):
+    max_x, max_y = shape
+    delta = 0.01
+
+    def f(coord):
+        return (delta * coord) ** 2
+
+    return reduce(np.minimum,
+                  [1,
+                   f(x),
+                   f(max_x - x),
+                   f(y),
+                   f(max_y - y)])
+
+plot_surface(TEXT_SHOW.shape, partial(center_fuzzy_set, shape=TEXT_SHOW.shape))
+
+
+# We are looking for $v$ where $v\in \textrm{T-juntion}\wedge v \in \textrm{Center-pixels}$ (performed in fuzzy sets logic)
+
+# In[17]:
+
+
+def centered_t_grades(graph, shape):
+    t_grades = [(v, t_grade(v, vs)) for v, vs in graph.items()]
+    return [((r, c), min(grade, center_fuzzy_set(r, c, shape)), grade_vec)
+            for (r, c), (grade, grade_vec) in t_grades]
+
+plot_t_juncitons(graph_edges(GRAPH_3),
+                 map(itemgetter(0,1), centered_t_grades(GRAPH_3, TEXT_SHOW.shape)))
+
+
+# In[18]:
+
+
+def direction_vector(t_grades):
+    sum_probs = sum(map(itemgetter(1), t_grades))
+    mults = [multiply(grade, vec) for _, grade, vec in t_grades if vec is not None]
+    return sum(mults) / sum_probs
+
+def evaluate_direction(graph, image_shape):
+    return direction_vector(centered_t_grades(graph, image_shape))
+
+
+# In[19]:
+
+
+class EdgeType(Enum):
+    BRIDGE = (0, 0, 255)
+    LINK = (0, 255, 0)
+
+def classify_edges(graph, direction):
+    return [((p1,p2), EdgeType.BRIDGE if abs(vcos(subtract(p2, p1), direction)) > 0.5 else EdgeType.LINK)
+            for p1,p2 in graph_edges(graph)]
+
+CLASSIFIED = classify_edges(GRAPH_3, evaluate_direction(GRAPH_3, TEXT_SHOW.shape))
+
+imshow(show_lines(TEXT_SHOW,
+                  map(itemgetter(0), CLASSIFIED),
+                  map(attrgetter('value'), map(itemgetter(1), CLASSIFIED))),
+       figure=figure_image())
+
