@@ -5,18 +5,19 @@
 
 
 from functools import reduce, partial
-from itertools import repeat, product
+from itertools import repeat, product, combinations, chain
 from operator import or_, add
 from random import randint
 from collections import deque, defaultdict
 
 import cv2
-from matplotlib.pyplot import imshow, figure
 import numpy as np
-from numpy import array, flip, zeros_like
+from numpy import array, flip, zeros_like, dot, subtract
+from numpy.linalg import norm
 
-# pylint: disable=undefined-variable
 get_ipython().run_line_magic('matplotlib', 'inline')
+from matplotlib.pyplot import imshow, figure, subplots
+from mpl_toolkits.mplot3d.axes3d import Axes3D
 
 
 # ## Morphing
@@ -41,10 +42,10 @@ def constant_border(image, length, value):
 # 
 #  For a given image $I$ and a mask $M$, pixel $p, q$ are
 #  considered m-adjacent if one of the following is true
-#  
+# 
 #   1. $q$ is a 4-adjcent of $p$ where $p,q\in M$
 #   2. $q$ is diagonal of $q$ where $p, q\in M$ *and*
-#      there is no $\omega\in M$ where $\omega$ 
+#      there is no $\omega\in M$ where $\omega$
 #      is both 4-adjecent of $p$ and 4-adjecent of $q$
 # 
 
@@ -93,10 +94,6 @@ def arrayuint8(rows):
 # In[5]:
 
 
-def imshow_gray(image, figsize=(50, 50)):
-    figure(figsize=figsize)
-    imshow(image, cmap='gray')
-
 def as_display(image):
     if image.shape[-1] == 3:
         return image
@@ -125,6 +122,15 @@ def show_points(image, points, radius=2):
         cv2.circle(image_with_circles, point, radius, randcolor, thickness=-1)
     return image_with_circles
 
+def figure_image(figsize=(15,15), **kwargs):
+    return figure(figsize=figsize, **kwargs)
+
+def plot_lines_3d(lines, colors, **kwargs):
+    _, ax = subplots(subplot_kw={'projection': '3d'}, **kwargs)
+    ax.set_zlim3d(0,2)
+    for (x, y, z), color in zip(lines, colors):
+        ax.plot(x, y, z, color=color)
+
 
 # # Input
 # 
@@ -138,7 +144,7 @@ TEXT = cv2.threshold(src=cv2.imread("arabic.jpg", cv2.IMREAD_GRAYSCALE),
                      maxval=1,
                      type=cv2.THRESH_BINARY)[1]
 
-imshow_gray(TEXT)
+imshow(TEXT, cmap='gray', figure=figure_image())
 
 
 # # Ducument preprocessing
@@ -149,7 +155,7 @@ imshow_gray(TEXT)
 
 TEXT_SHOW = constant_border(TEXT, 10, 1)
 TEXT_ERODE = cv2.erode(constant_border(TEXT, 10, 0), circle(3))
-imshow_gray(TEXT_ERODE)
+imshow(TEXT_ERODE, cmap='gray', figure=figure_image())
 
 
 # # Distance transform
@@ -158,7 +164,7 @@ imshow_gray(TEXT_ERODE)
 
 
 DIST = cv2.distanceTransform(TEXT_ERODE, cv2.DIST_L2, cv2.DIST_MASK_5)
-imshow_gray(DIST)
+imshow(DIST, cmap='gray', figure=figure_image())
 
 
 # # Local maxima
@@ -169,7 +175,7 @@ imshow_gray(DIST)
 
 
 def local_maxima(image):
-    
+
     horizontals = list(map(arrayuint8, [
         [
             [0, 0, 1, 0, 0],
@@ -186,9 +192,9 @@ def local_maxima(image):
             [0, 0, 0, 1, 0]
         ],
     ]))
-    
+
     horizontals_fliped = [flip(mat, 1) for mat in horizontals]
-    
+
 
     kernels = [mat
                for matrices in [(mat, mat.T) for mat in horizontals + horizontals_fliped]
@@ -201,7 +207,7 @@ def local_maxima(image):
 
 LOCAL_DIST_MAXIMA = local_maxima(DIST)
 
-imshow_gray(LOCAL_DIST_MAXIMA, figsize=(50, 50))
+imshow(LOCAL_DIST_MAXIMA, cmap='gray', figure=figure_image())
 
 
 # # Graph
@@ -215,6 +221,7 @@ imshow_gray(LOCAL_DIST_MAXIMA, figsize=(50, 50))
 # e.g
 # 
 # Given the folowwing shape,
+# 
 # 
 # $\begin{pmatrix}0&0&0&0&0\\0&0&0&0&0\\1&1&\textbf{p}&1&1\\0&0&1&0&0\\0&0&1&0&0 \end{pmatrix}$
 # 
@@ -306,11 +313,11 @@ def mark_junction_pixels(binary):
     return reduce(or_, map(filter_junction, rotated_mats), zeros_like(binary))
 
 imshow(LOCAL_DIST_MAXIMA + mark_junction_pixels(LOCAL_DIST_MAXIMA),
-       figure=figure(figsize=(50, 50)))
+       figure=figure_image())
 
 
 # ## Vertices
-# We define 
+# We define vertices as centeroids of each connected component of juntion pixels
 
 # In[11]:
 
@@ -326,7 +333,7 @@ def extract_vertices(junction_pixels):
 
 LOCAL_MAX_VERTS, LABELS = extract_vertices(mark_junction_pixels(LOCAL_DIST_MAXIMA))
 imshow(show_points(LOCAL_DIST_MAXIMA, LOCAL_MAX_VERTS, 3),
-       figure=figure(figsize=(50, 50)))
+       figure=figure_image())
 
 
 #  # Edges
@@ -419,15 +426,15 @@ imshow(
             repeat((200, 24, 0)),
             width=1),
         LOCAL_MAX_VERTS, 2),
-    figure=figure(figsize=(50, 50)))
+    figure=figure_image())
 
 imshow(show_lines(TEXT_SHOW, graph_edges(GRAPH), repeat((150, 150, 0))),
-       figure=figure(figsize=(50, 50)))
+       figure=figure_image())
 
 
-# # Dilute graph to 3-connected
+# # Dilute to 3-connected
 # 
-# Until we get a graph where all it's vertices have at least 3 neighbors, we rebuild the graph by find all 3 connected neighbors for each 3-connected vertice
+# Until we get a graph where all it's vertices have at least 3 neighbors, we rebuild the graph by find all 3 connected neighbors for vertice with at least 3 neighbors.
 
 # In[13]:
 
@@ -446,7 +453,7 @@ def graph_connected(start, graph):
         for v in [v for v, n_vs in vs if n_vs > 2]:
             yield v
 
-def build_3_connected(graph):
+def dilute_to_3_connected(graph):
     graph3 = graph.copy()
     while True:
         verts3 = [v for v, n_vs in graph3.items() if len(n_vs) > 2]
@@ -458,8 +465,61 @@ def build_3_connected(graph):
             verts=verts3,
             find_connected_verts=partial(graph_connected, graph=graph3))
 
-GRAPH_3 = build_3_connected(GRAPH)
+GRAPH_3 = dilute_to_3_connected(GRAPH)
 
 imshow(show_lines(TEXT_SHOW, graph_edges(GRAPH_3), repeat((100, 50, 150))),
-       figure=figure(figsize=(50, 50)))
+       figure=figure_image())
 
+
+# # Edge classification
+
+# ## T juncitons
+# We use fuzzy logic to determin if a vertex is of a T juntion.
+# 
+# For any vertex $v_0$ with 3 neighbors $v_1, v_2, v_3$ Let
+# $VS=\{\vec{v_0v_1}, \vec{v_0v_2}, \vec{v_0v_3}\}$ And let $\theta_1, \theta_2, \theta_3$ be angles between each two vector pair $\vec{\tilde{v_1}}, \vec{\tilde{v_2}} \in VS$
+# 
+# We check how much each angle is close to $90^{\circ}$ by calculating
+# $\frac{\tilde{v_1}\cdot\tilde{v_2}}{\Vert\tilde{v_1} \rVert\Vert\tilde{v_2} \rVert} = \cos(\theta)$ and seeing how close to zero it is.
+# 
+# The juntion grade is the second closest angle to $90^{\circ}$ out of $\theta_1\dots \theta_3$ (for a perfect T juntion, we expect angles $90^{\circ}, 90^{\circ}, 180^{\circ}$)
+
+# In[27]:
+
+
+def vcos(v1, v2):
+    return dot(v1, v2) / (norm(v1) * norm(v2))
+
+def t_grade(v, vs):
+    if(len(vs) != 3):
+        return 0
+
+    vectors = (subtract(v2, v) for v2 in vs)
+    cosines = (abs(vcos(v1, v2)) for v1,v2 in combinations(vectors, 2))
+    linear_grade = 1 - sorted(cosines)[1]
+    return linear_grade ** 2
+
+T_GRADES = list((v, t_grade(v, vs)) for v, vs in GRAPH_3.items())
+
+
+# In[37]:
+
+
+def plot_t_juncitons(edges, t_grades):
+    t_grades = list(t_grades)
+    graph_lines_3D = list(tuple(zip(*edge)) + ((0, 0),) for edge in edges)
+    tgrades_lines_3d = list(((vy, vy), (vx, vx), (0, grade)) for (vx, vy), grade in t_grades)
+
+    plot_lines_3d(
+        chain(graph_lines_3D,
+              tgrades_lines_3d),
+        chain(repeat("gray", len(graph_lines_3D)),
+              ((grade, 0 ,1 - grade, 0.5 + grade / 2)
+               for _, grade in t_grades)),
+        figsize=(15,7))
+
+plot_t_juncitons(graph_edges(GRAPH_3), T_GRADES)
+
+
+# ## Center pixels
+# we want to eliminate pixels at the edges of the pictures
