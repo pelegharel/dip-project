@@ -165,10 +165,13 @@ def plot_surface(shape, z):
 # In[6]:
 
 
-TEXT = cv2.threshold(src=cv2.imread("arabic.jpg", cv2.IMREAD_GRAYSCALE),
+def read_document(path):
+    return cv2.threshold(src=cv2.imread(path, cv2.IMREAD_GRAYSCALE),
                      thresh=200,
                      maxval=1,
                      type=cv2.THRESH_BINARY)[1]
+
+TEXT = read_document("document.jpg")
 
 imshow(TEXT, cmap='gray', figure=figure_image())
 
@@ -179,8 +182,15 @@ imshow(TEXT, cmap='gray', figure=figure_image())
 # In[7]:
 
 
-TEXT_SHOW = constant_border(TEXT, 10, 1)
-TEXT_ERODE = cv2.erode(constant_border(TEXT, 10, 0), circle(3))
+def preprocess(image):
+    white_border = 20
+    black_border = 10
+    return (constant_border(image, 30, 1),
+            cv2.erode(constant_border(constant_border(image, white_border, 1),
+                                      black_border, 0),
+                      circle(3)))
+
+TEXT_SHOW, TEXT_ERODE = preprocess(TEXT)
 imshow(TEXT_ERODE, cmap='gray', figure=figure_image())
 
 
@@ -566,7 +576,7 @@ plot_t_juncitons(graph_edges(GRAPH_3),
 
 def center_fuzzy_set(x, y, shape):
     max_x, max_y = shape
-    delta = 0.01
+    delta = 0.005
 
     def f(coord):
         return (delta * coord) ** 2
@@ -574,7 +584,7 @@ def center_fuzzy_set(x, y, shape):
     R = ((x - max_x / 2)**2 + (y - max_y/2)**2)** 0.5
     return reduce(np.minimum,
                   [1,
-                   1 / (0.5 + R* delta)])
+                   1 / (0.5 + R* delta)** 4])
 
 plot_surface(TEXT_SHOW.shape, partial(center_fuzzy_set, shape=TEXT_SHOW.shape))
 
@@ -623,4 +633,42 @@ imshow(show_lines(TEXT_SHOW,
                   map(itemgetter(0), CLASSIFIED),
                   map(attrgetter('value'), map(itemgetter(1), CLASSIFIED))),
        figure=figure_image())
+
+
+# In[20]:
+
+
+def run_all(path):
+    text_show, text_erode = preprocess(read_document(path))
+    dist_maxima = local_maxima(cv2.distanceTransform(text_erode, cv2.DIST_L2, cv2.DIST_MASK_5))
+
+    max_verts, labels = extract_vertices(mark_junction_pixels(dist_maxima))
+
+    row_index_verts = [(c, r) for r, c in max_verts]
+
+    graph = build_graph(
+        verts=set(row_index_verts),
+        find_connected_verts=partial(mask_connected,
+                                     search_mask=dist_maxima,
+                                     covermap=partial(
+                                         pixel_vert,
+                                         labels_map=labels,
+                                         verts=row_index_verts,
+                                         area_map=area_to_vert(row_index_verts, 4)
+                                     )))
+
+    graph_3 = dilute_to_3_connected(graph)
+
+    classified = classify_edges(graph_3, evaluate_direction(graph_3, text_show.shape))
+
+    imshow(show_lines(text_show,
+                      map(itemgetter(0), classified),
+                      map(attrgetter('value'), map(itemgetter(1), classified))),
+           figure=figure_image())
+
+
+# In[21]:
+
+
+run_all("document.jpg")
 
