@@ -102,7 +102,7 @@ def arrayuint8(rows):
 
 # ## Display
 
-# In[6]:
+# In[5]:
 
 
 def as_display(image):
@@ -162,7 +162,7 @@ def plot_surface(shape, z):
 # 
 # We get a text document as input
 
-# In[7]:
+# In[6]:
 
 
 TEXT = cv2.threshold(src=cv2.imread("arabic.jpg", cv2.IMREAD_GRAYSCALE),
@@ -176,7 +176,7 @@ imshow(TEXT, cmap='gray', figure=figure_image())
 # # Ducument preprocessing
 # We erode input to emphasize words and add a black border to force graph edges at picture sides
 
-# In[8]:
+# In[7]:
 
 
 TEXT_SHOW = constant_border(TEXT, 10, 1)
@@ -186,7 +186,7 @@ imshow(TEXT_ERODE, cmap='gray', figure=figure_image())
 
 # # Distance transform
 
-# In[9]:
+# In[8]:
 
 
 DIST = cv2.distanceTransform(TEXT_ERODE, cv2.DIST_L2, cv2.DIST_MASK_5)
@@ -197,7 +197,7 @@ imshow(DIST, cmap='gray', figure=figure_image())
 # 
 # Each pixel $p$ is consider local maximum if $p > q_1 \wedge p> q_2$ where $q_1, q_2$ are opposite pixels in the 8-member inviroment of $p$
 
-# In[10]:
+# In[9]:
 
 
 def local_maxima(image):
@@ -246,14 +246,14 @@ imshow(LOCAL_DIST_MAXIMA, cmap='gray', figure=figure_image())
 # 
 # e.g
 # 
-# Given the folowwing shape,
+# Given the following shape,
 # 
 # 
 # $\begin{pmatrix}0&0&0&0&0\\0&0&0&0&0\\1&1&\textbf{p}&1&1\\0&0&1&0&0\\0&0&1&0&0 \end{pmatrix}$
 # 
-# If the folowwing shape exists in local maxima (meaning all if the shape pixels are $1$), the pixel $p$ is a junciton pixel.
+# If the shape exists in distmap local maxima (meaning all if the shape pixels are $1$), the pixel $p$ is a junciton pixel.
 
-# In[11]:
+# In[10]:
 
 
 def rotations(mat):
@@ -345,7 +345,7 @@ imshow(LOCAL_DIST_MAXIMA + mark_junction_pixels(LOCAL_DIST_MAXIMA),
 # ## Vertices
 # We define vertices as centeroids of each connected component of juntion pixels
 
-# In[12]:
+# In[11]:
 
 
 def extract_vertices(junction_pixels):
@@ -371,7 +371,7 @@ imshow(show_points(LOCAL_DIST_MAXIMA, LOCAL_MAX_VERTS, 3),
 #   - Perform a $BFS$ scan on [local maxima](#Local-maxima) starting from $v$ iterating m-adjecent neighbors
 #   - Add all found neighbors of $v$ into the graph as vonnected to $v$
 
-# In[13]:
+# In[12]:
 
 
 def area_to_vert(verts, radius):
@@ -462,7 +462,7 @@ imshow(show_lines(TEXT_SHOW, graph_edges(GRAPH), repeat((150, 150, 0))),
 # 
 # Until we get a graph where all it's vertices have at least 3 neighbors, we rebuild the graph by find all 3 connected neighbors for vertice with at least 3 neighbors.
 
-# In[14]:
+# In[13]:
 
 
 def graph_connected(start, graph):
@@ -510,7 +510,7 @@ imshow(show_lines(TEXT_SHOW, graph_edges(GRAPH_3), repeat((100, 50, 150))),
 # 
 # The juntion grade is the second closest angle to $90^{\circ}$ out of $\theta_1\dots \theta_3$ (for a perfect T juntion, we expect angles $90^{\circ}, 90^{\circ}, 180^{\circ}$)
 
-# In[15]:
+# In[14]:
 
 
 def vcos(v1, v2):
@@ -527,7 +527,7 @@ def t_grade(v, vs):
     sorted_pairs = [tuple(map(tuple, v)) for v, _ in sorted_grades]
 
     linear_grade = 1 - sorted_grades[1][1]
-    graded_vec = reduce(set.intersection, map(set, sorted_pairs[:2])).pop()
+    graded_vec = set(sorted_pairs[0]).intersection(sorted_pairs[1]).pop()
 
     if graded_vec[0]:
         graded_vec = multiply(sign(graded_vec[0]), graded_vec)
@@ -538,7 +538,7 @@ def t_grade(v, vs):
     return (linear_grade ** 2, graded_vec)
 
 
-# In[16]:
+# In[15]:
 
 
 def plot_t_juncitons(edges, t_grades):
@@ -561,7 +561,7 @@ plot_t_juncitons(graph_edges(GRAPH_3),
 # ## Center pixels
 # we want to eliminate pixels at the edges of the pictures therefore we use a fuzzy set $Center$
 
-# In[17]:
+# In[16]:
 
 
 def center_fuzzy_set(x, y, shape):
@@ -571,19 +571,17 @@ def center_fuzzy_set(x, y, shape):
     def f(coord):
         return (delta * coord) ** 2
 
+    R = ((x - max_x / 2)**2 + (y - max_y/2)**2)** 0.5
     return reduce(np.minimum,
                   [1,
-                   f(x),
-                   f(max_x - x),
-                   f(y),
-                   f(max_y - y)])
+                   1 / (0.5 + R* delta)])
 
 plot_surface(TEXT_SHOW.shape, partial(center_fuzzy_set, shape=TEXT_SHOW.shape))
 
 
 # We are looking for $v$ where $v\in \textrm{T-juntion}\wedge v \in \textrm{Center-pixels}$ (performed in fuzzy sets logic)
 
-# In[18]:
+# In[17]:
 
 
 def centered_t_grades(graph, shape):
@@ -595,7 +593,7 @@ plot_t_juncitons(graph_edges(GRAPH_3),
                  map(itemgetter(0, 1), centered_t_grades(GRAPH_3, TEXT_SHOW.shape)))
 
 
-# In[19]:
+# In[18]:
 
 
 def direction_vector(t_grades):
@@ -604,18 +602,19 @@ def direction_vector(t_grades):
     return sum(mults) / sum_probs
 
 def evaluate_direction(graph, image_shape):
-    return direction_vector(centered_t_grades(graph, image_shape))
+    return direction_vector(centered_t_grades(graph, image_shape))[::-1]
 
 
-# In[20]:
+# In[19]:
 
 
 class EdgeType(Enum):
-    BRIDGE = (0, 0, 255)
-    LINK = (0, 255, 0)
+    BRIDGE = (0, 0, 255) # blue
+    LINK = (0, 255, 0) # green
 
 def classify_edges(graph, direction):
-    return [((p1, p2), EdgeType.BRIDGE if abs(vcos(subtract(p2, p1), direction)) > 0.5 else EdgeType.LINK)
+    return [((p1, p2),
+             EdgeType.BRIDGE if abs(vcos(subtract(p2, p1), direction)) > 0.5 else EdgeType.LINK)
             for p1, p2 in graph_edges(graph)]
 
 CLASSIFIED = classify_edges(GRAPH_3, evaluate_direction(GRAPH_3, TEXT_SHOW.shape))
