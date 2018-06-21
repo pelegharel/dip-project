@@ -141,7 +141,7 @@ def show_points(image, points, radius=2):
         cv2.circle(image_with_circles, point, radius, randcolor, thickness=-1)
     return image_with_circles
 
-def figure_image(figsize=(15, 15), **kwargs):
+def figure_image(figsize=(20, 20), **kwargs):
     return figure(figsize=figsize, **kwargs)
 
 def plot_lines_3d(lines, colors, **kwargs):
@@ -459,7 +459,7 @@ GRAPH = build_graph(
                                      pixel_vert,
                                      labels_map=LABELS,
                                      verts=ROW_INDEX_VERTS,
-                                     area_map=area_to_vert(ROW_INDEX_VERTS, 4)
+                                     area_map=area_to_vert(ROW_INDEX_VERTS, 3)
                                  )))
 
 imshow(
@@ -659,7 +659,7 @@ def run_all(path):
                                          pixel_vert,
                                          labels_map=labels,
                                          verts=row_index_verts,
-                                         area_map=area_to_vert(row_index_verts, 4)
+                                         area_map=area_to_vert(row_index_verts, 3)
                                      )))
 
     graph_3 = dilute_to_3_connected(graph)
@@ -676,4 +676,6 @@ def run_all(path):
 
 
 run_all("document.jpg")
+run_all("document_rot.jpg")
+run_all("document2.jpg")
 
