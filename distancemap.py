@@ -26,9 +26,9 @@ from numpy.linalg import norm
 
 from matplotlib.pyplot import imshow, figure, subplots
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
-from mpl_toolkits.mplot3d.axes3d import Axes3D
-# pylint: disable=undefined-variable
-get_ipython().run_line_magic('matplotlib', 'inline')
+from mpl_toolkits.mplot3d.axes3d import Axes3D# pylint: disable=unused-import
+
+get_ipython().run_line_magic('matplotlib', 'inline')# pylint: disable=undefined-variable
 
 
 # ## Morphing
@@ -46,7 +46,13 @@ def cvclose(image, kernel):
     return cv2.erode(cv2.dilate(image, kernel), kernel)
 
 def constant_border(image, length, value):
-    return cv2.copyMakeBorder(image, length, length, length, length, cv2.BORDER_CONSTANT, value=value)
+    return cv2.copyMakeBorder(image,
+                              length,
+                              length,
+                              length,
+                              length,
+                              cv2.BORDER_CONSTANT,
+                              value=value)
 
 
 # # m-adjacent neighbors
@@ -83,7 +89,9 @@ def adjesent_m(pixel, mask):
 
     neighbors_diag = [(o_r, o_c)
                       for o_r, o_c in [(1, 1), (-1, 1), (-1, -1), (1, -1)]
-                      if set([(0, o_r), (o_c, 0)]).isdisjoint(neighbors_4) and is_in(add_offset((o_r, o_c)))]
+                      if
+                      set([(0, o_r), (o_c, 0)]).isdisjoint(neighbors_4) and
+                      is_in(add_offset((o_r, o_c)))]
 
     return [add_offset(offset) for offset in neighbors_4 + neighbors_diag]
 
@@ -167,9 +175,9 @@ def plot_surface(shape, z):
 
 def read_document(path):
     return cv2.threshold(src=cv2.imread(path, cv2.IMREAD_GRAYSCALE),
-                     thresh=200,
-                     maxval=1,
-                     type=cv2.THRESH_BINARY)[1]
+                         thresh=200,
+                         maxval=1,
+                         type=cv2.THRESH_BINARY)[1]
 
 TEXT = read_document("document.jpg")
 
@@ -578,13 +586,10 @@ def center_fuzzy_set(x, y, shape):
     max_x, max_y = shape
     delta = 0.005
 
-    def f(coord):
-        return (delta * coord) ** 2
-
-    R = ((x - max_x / 2)**2 + (y - max_y/2)**2)** 0.5
+    r = ((x - max_x / 2)**2 + (y - max_y/2)**2)** 0.5
     return reduce(np.minimum,
                   [1,
-                   1 / (0.5 + R* delta)** 4])
+                   1 / (0.5 + r * delta)** 4])
 
 plot_surface(TEXT_SHOW.shape, partial(center_fuzzy_set, shape=TEXT_SHOW.shape))
 
