@@ -351,10 +351,8 @@ def mark_junction_pixels(binary):
                     for mat in junctions
                     for rotated in rotations(mat))
 
-    def filter_junction(junction):
-        return cv2.erode(binary, junction)
-
-    return reduce(or_, map(filter_junction, rotated_mats), zeros_like(binary))
+    return reduce(or_,
+                  map(partial(cv2.erode, binary), rotated_mats), zeros_like(binary))
 
 imshow(LOCAL_DIST_MAXIMA + mark_junction_pixels(LOCAL_DIST_MAXIMA),
        figure=figure_image())
