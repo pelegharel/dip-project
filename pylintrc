@@ -1,5 +1,5 @@
 [FORMAT]
-good-names=i,j,k,x,r,c,px,py
+good-names=i,j,k,x,y,r,c,px,py
 
 [REPORTS]
 output-format=colorized
@@ -7,3 +7,5 @@ output-format=colorized
 
 generated-members=cv.*
 
+[MESSAGE CONTROL]
+disable=no-else-return

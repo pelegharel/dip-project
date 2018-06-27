@@ -1,6 +1,25 @@
 
 # coding: utf-8
 
+# # Link and bridges classification
+# 
+# ## Stages
+# 
+# 1. [Obtain input image](#Input)
+# 2. [Pre processsing](#Ducument-preprocessing)
+# 3. [Distance transform](#Distance-transform)
+# 4. [Local maxima map](#Local-maxima)
+# 5. [Graph building](#Graph)
+#  1. [Junction estimation](#Junction-pixels)
+#  2. [Vertices through centeroids](#Vertices)
+#  3. [Edges through BFS scan](#Edges)
+# 6. [Dilute to 3 connected](#Dilute-to-3-connected)
+# 7. [Edge classification](#Edge-classification)
+#  1. [T juncitons fuzzy set](#T-juncitons)
+#  2. [Center pixels fuzzy set](#Center-pixels)
+#  3. [Bridge direction estimation](#Bridge-direction-estimation)
+#  4. [Classification](#Classification)
+
 # In[1]:
 
 
@@ -606,6 +625,12 @@ plot_t_juncitons(graph_edges(GRAPH_3),
                  map(itemgetter(0, 1), centered_t_grades(GRAPH_3, TEXT_SHOW.shape)))
 
 
+# # Bridge direction estimation 
+# 
+# Let t-juntion grade be $g_t$ and center pixel gade be $g_c$
+# 
+# The direction vector of bridges is defined as a weighted avarage of each total grade ,$\min{(g_t,g_c)}$, times its corrospondeing middle vector's direction.
+
 # In[18]:
 
 
@@ -617,6 +642,9 @@ def direction_vector(t_grades):
 def evaluate_direction(graph, image_shape):
     return direction_vector(centered_t_grades(graph, image_shape))[::-1]
 
+
+# # Classification
+# Using abs of cos value between the estimated bridge direction vector, we determine how close each edge is to be a bridge. that way we clssify each edge to be either a bridge or a link
 
 # In[19]:
 
