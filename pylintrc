@@ -1,6 +1,3 @@
-[FORMAT]
-good-names=i,j,k,x,y,r,c,px,py
-
 [REPORTS]
 output-format=colorized
 

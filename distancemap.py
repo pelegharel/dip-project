@@ -89,15 +89,15 @@ def constant_border(image, length, value):
 
 
 def is_in_image(pixel, shape):
-    r, c = pixel
+    row, col = pixel
     rows, cols = shape
-    return ((0 <= r < rows) and
-            (0 <= c < cols))
+    return ((0 <= row < rows) and
+            (0 <= col < cols))
 
 def adjesent_m(pixel, mask):
     def is_in(pixel):
-        r, c = pixel
-        return is_in_image((r, c), mask.shape) and mask[r, c]
+        row, col = pixel
+        return is_in_image((row, col), mask.shape) and mask[row, col]
 
     def add_offset(offset):
         return tuple(map(add, pixel, offset))
@@ -166,15 +166,15 @@ def figure_image(figsize=(20, 20), **kwargs):
 def plot_lines_3d(lines, colors, **kwargs):
     _, axes = subplots(subplot_kw={'projection': '3d'}, **kwargs)
     axes.set_zlim3d(0, 2)
-    for (x, y, z), color in zip(lines, colors):
-        axes.plot(x, y, z, color=color)
+    for (xvals, yvals, zvals), color in zip(lines, colors):
+        axes.plot(xvals, yvals, zvals, color=color)
 
-def plot_surface(shape, z):
+def plot_surface(shape, zfunc):
     fig = figure(figsize=(15, 7))
     axes = fig.gca(projection='3d')
 
     xgrid, ygrid = np.meshgrid(*(arange(0, coord, 1) for coord in shape))
-    zgrid = z(xgrid, ygrid)
+    zgrid = zfunc(xgrid, ygrid)
     axes.plot_surface(xgrid, ygrid, zgrid,
                       cmap="coolwarm",
                       linewidth=0,
@@ -431,22 +431,22 @@ def mask_connected(start, search_mask, covermap):
         pos = bfs_q.popleft()
         vert = covermap(pos) or start
         if start == vert:
-            nextvs = [v for v in adjesent_m(pos, search_mask) if v not in visited]
-            visited.update(nextvs)
-            bfs_q.extend(nextvs)
+            next_verts = [v for v in adjesent_m(pos, search_mask) if v not in visited]
+            visited.update(next_verts)
+            bfs_q.extend(next_verts)
         else:
             yield vert
 
 def build_graph(verts, find_connected_verts):
-    edges = ((v1, v2)
-             for v1 in verts
-             for v2 in find_connected_verts(v1))
+    edges = ((vert1, vert2)
+             for vert1 in verts
+             for vert2 in find_connected_verts(vert1))
 
     graph = defaultdict(set)
 
-    for v1, v2 in edges:
-        graph[v1].add(v2)
-        graph[v2].add(v1)
+    for vert1, vert2 in edges:
+        graph[vert1].add(vert2)
+        graph[vert2].add(vert1)
 
     return graph
 
@@ -505,19 +505,26 @@ def graph_connected(start, graph):
     bfs_q = deque([start])
 
     while bfs_q:
-        vs = [(v, len(graph[v])) for v in graph[bfs_q.popleft()]
-              if v not in visited and v != start]
-        nextvs = [v for v, n_vs in vs if n_vs <= 2]
-        visited.update(nextvs)
-        bfs_q.extend(nextvs)
+        connected_verts = [
+            (vert, len(graph[vert])) for vert in graph[bfs_q.popleft()]
+            if vert not in visited and vert != start]
+        
+        next_verts = [vert
+                      for vert, nconnected in connected_verts
+                      if nconnected <= 2]
 
-        for v in [v for v, n_vs in vs if n_vs > 2]:
-            yield v
+        visited.update(next_verts)
+        bfs_q.extend(next_verts)
+
+        for vert in [vert
+                     for vert, nconnected in connected_verts
+                     if nconnected > 2]:
+            yield vert
 
 def dilute_to_3_connected(graph):
     graph3 = graph.copy()
     while True:
-        verts3 = [v for v, n_vs in graph3.items() if len(n_vs) > 2]
+        verts3 = [vert for vert, verts in graph3.items() if len(verts) > 2]
 
         if len(verts3) == len(graph3.keys()):
             return graph3
@@ -548,18 +555,20 @@ imshow(show_lines(TEXT_SHOW, graph_edges(GRAPH_3), repeat((100, 50, 150))),
 # In[14]:
 
 
-def vcos(v1, v2):
-    return dot(v1, v2) / (norm(v1) * norm(v2))
+def vcos(vec1, vec2):
+    return dot(vec1, vec2) / (norm(vec1) * norm(vec2))
 
-def t_grade(v, vs):
-    if len(vs) != 3:
+def t_grade(vert, connected_verts):
+    if len(connected_verts) != 3:
         return (0, None)
 
-    vectors = (subtract(v2, v) for v2 in vs)
-    cosines = (((v1, v2), abs(vcos(v1, v2))) for v1, v2 in combinations(vectors, 2))
+    vectors = (subtract(vert2, vert) for vert2 in connected_verts)
+    cosines = (((vec1, vec2), abs(vcos(vec1, vec2)))
+               for vec1, vec2 in combinations(vectors, 2))
     sorted_grades = sorted(cosines, key=itemgetter(1))
 
-    sorted_pairs = [tuple(map(tuple, v)) for v, _ in sorted_grades]
+    sorted_pairs = [tuple(map(tuple, vec_pair))
+                    for vec_pair, _ in sorted_grades]
 
     linear_grade = 1 - sorted_grades[1][1]
     graded_vec = set(sorted_pairs[0]).intersection(sorted_pairs[1]).pop()
@@ -578,19 +587,25 @@ def t_grade(v, vs):
 
 def plot_t_juncitons(edges, t_grades):
     t_grades = list(t_grades)
-    graph_lines_3D = list(tuple(zip(*edge)) + ((0, 0),) for edge in edges)
-    tgrades_lines_3d = list(((vy, vy), (vx, vx), (0, grade)) for (vx, vy), grade in t_grades)
+    graph_lines_3d = [tuple(zip(*edge)) + ((0, 0),) for edge in edges]
+    tgrades_lines_3d = [
+        (
+            (col, col),
+            (row, row),
+            (0, grade)
+        )
+        for (row, col), grade in t_grades]
 
     plot_lines_3d(
-        chain(graph_lines_3D,
+        chain(graph_lines_3d,
               tgrades_lines_3d),
-        chain(repeat("gray", len(graph_lines_3D)),
+        chain(repeat("gray", len(graph_lines_3d)),
               ((grade, 0, 1 - grade, 0.5 + grade / 2)
                for _, grade in t_grades)),
         figsize=(15, 7))
 
 plot_t_juncitons(graph_edges(GRAPH_3),
-                 ((v, t_grade(v, vs)[0]) for v, vs in GRAPH_3.items()))
+                 ((vert, t_grade(vert, connected_verts)[0]) for vert, connected_verts in GRAPH_3.items()))
 
 
 # ## Center pixels
@@ -599,14 +614,14 @@ plot_t_juncitons(graph_edges(GRAPH_3),
 # In[16]:
 
 
-def center_fuzzy_set(x, y, shape):
+def center_fuzzy_set(p_x, p_y, shape):
     max_x, max_y = shape
     delta = 0.005
 
-    r = ((x - max_x / 2)**2 + (y - max_y/2)**2)** 0.5
+    radius = ((p_x - max_x / 2)**2 + (p_y - max_y/2)**2)** 0.5
     return reduce(np.minimum,
                   [1,
-                   1 / (0.5 + r * delta)** 4])
+                   1 / (0.5 + radius * delta)** 4])
 
 plot_surface(TEXT_SHOW.shape, partial(center_fuzzy_set, shape=TEXT_SHOW.shape))
 
@@ -618,8 +633,13 @@ plot_surface(TEXT_SHOW.shape, partial(center_fuzzy_set, shape=TEXT_SHOW.shape))
 
 def centered_t_grades(graph, shape):
     t_grades = [(v, t_grade(v, vs)) for v, vs in graph.items()]
-    return [((r, c), min(grade, center_fuzzy_set(r, c, shape)), grade_vec)
-            for (r, c), (grade, grade_vec) in t_grades]
+    return [
+        (
+            (row, col),
+            min(grade, center_fuzzy_set(row, col, shape)),
+            grade_vec
+        )
+        for (row, col), (grade, grade_vec) in t_grades]
 
 plot_t_juncitons(graph_edges(GRAPH_3),
                  map(itemgetter(0, 1), centered_t_grades(GRAPH_3, TEXT_SHOW.shape)))
