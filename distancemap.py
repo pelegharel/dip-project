@@ -89,15 +89,15 @@ def constant_border(image, length, value):
 
 
 def is_in_image(pixel, shape):
-    row, col = pixel
+    col, row = pixel
     rows, cols = shape
     return ((0 <= row < rows) and
             (0 <= col < cols))
 
 def adjesent_m(pixel, mask):
     def is_in(pixel):
-        row, col = pixel
-        return is_in_image((row, col), mask.shape) and mask[row, col]
+        col, row = pixel
+        return is_in_image(pixel, mask.shape) and mask[row, col]
 
     def add_offset(offset):
         return tuple(map(add, pixel, offset))
@@ -106,11 +106,11 @@ def adjesent_m(pixel, mask):
                    for offset in [(1, 0), (0, 1), (-1, 0), (0, -1)]
                    if is_in(add_offset(offset))]
 
-    neighbors_diag = [(o_r, o_c)
-                      for o_r, o_c in [(1, 1), (-1, 1), (-1, -1), (1, -1)]
+    neighbors_diag = [(o_x, o_y)
+                      for o_x, o_y in [(1, 1), (-1, 1), (-1, -1), (1, -1)]
                       if
-                      set([(0, o_r), (o_c, 0)]).isdisjoint(neighbors_4) and
-                      is_in(add_offset((o_r, o_c)))]
+                      set([(0, o_x), (o_y, 0)]).isdisjoint(neighbors_4) and
+                      is_in(add_offset((o_x, o_y)))]
 
     return [add_offset(offset) for offset in neighbors_4 + neighbors_diag]
 
@@ -198,7 +198,7 @@ def read_document(path):
                          maxval=1,
                          type=cv2.THRESH_BINARY)[1]
 
-TEXT = read_document("document.jpg")
+TEXT = read_document("document_rot.jpg")
 
 imshow(TEXT, cmap='gray', figure=figure_image())
 
@@ -416,7 +416,7 @@ def area_to_vert(verts, radius):
                                      range(y - radius, y + radius)))
 
 def pixel_vert(pos, verts, labels_map, area_map):
-    row, col = pos
+    col, row = pos
     label = labels_map[row, col]
     if 0 <= label < len(verts):
         return verts[label]
@@ -458,25 +458,19 @@ def remove_verts(graph, rmverts):
                  for vert, neighbors in graph.items())
 
 def graph_edges(graph):
-    return set(tuple(sorted(((c1, r1), (c2, r2))))
-               for (r1, c1), connecetd in graph.items()
-               for (r2, c2) in connecetd)
-
-
-def graph_vertices(graph):
-    return graph.keys()
-
-ROW_INDEX_VERTS = [(c, r) for r, c in LOCAL_MAX_VERTS]
+    return set(tuple(sorted((vert1, vert2)))
+               for vert1, connecetd in graph.items()
+               for vert2 in connecetd)
 
 GRAPH = build_graph(
-    verts=set(ROW_INDEX_VERTS),
+    verts=set(LOCAL_MAX_VERTS),
     find_connected_verts=partial(mask_connected,
                                  search_mask=LOCAL_DIST_MAXIMA,
                                  covermap=partial(
                                      pixel_vert,
                                      labels_map=LABELS,
-                                     verts=ROW_INDEX_VERTS,
-                                     area_map=area_to_vert(ROW_INDEX_VERTS, 3)
+                                     verts=LOCAL_MAX_VERTS,
+                                     area_map=area_to_vert(LOCAL_MAX_VERTS, 3)
                                  )))
 
 imshow(
@@ -573,13 +567,7 @@ def t_grade(vert, connected_verts):
     linear_grade = 1 - sorted_grades[1][1]
     graded_vec = set(sorted_pairs[0]).intersection(sorted_pairs[1]).pop()
 
-    if graded_vec[0]:
-        graded_vec = multiply(sign(graded_vec[0]), graded_vec)
-    elif graded_vec[1]:
-        graded_vec = multiply(sign(graded_vec[1]), graded_vec)
-
-    graded_vec = divide(graded_vec, norm(graded_vec))
-    return (linear_grade ** 2, graded_vec)
+    return (linear_grade ** 2, divide(graded_vec, norm(graded_vec)))
 
 
 # In[15]:
@@ -590,11 +578,11 @@ def plot_t_juncitons(edges, t_grades):
     graph_lines_3d = [tuple(zip(*edge)) + ((0, 0),) for edge in edges]
     tgrades_lines_3d = [
         (
-            (col, col),
-            (row, row),
+            (x, x),
+            (y, y),
             (0, grade)
         )
-        for (row, col), grade in t_grades]
+        for (x, y), grade in t_grades]
 
     plot_lines_3d(
         chain(graph_lines_3d,
@@ -623,7 +611,7 @@ def center_fuzzy_set(p_x, p_y, shape):
                   [1,
                    1 / (0.5 + radius * delta)** 4])
 
-plot_surface(TEXT_SHOW.shape, partial(center_fuzzy_set, shape=TEXT_SHOW.shape))
+plot_surface(TEXT_SHOW.shape[::-1], partial(center_fuzzy_set, shape=TEXT_SHOW.shape[::-1]))
 
 
 # We are looking for $v$ where $v\in \textrm{T-juntion}\wedge v \in \textrm{Center-pixels}$ (performed in fuzzy sets logic)
@@ -635,14 +623,14 @@ def centered_t_grades(graph, shape):
     t_grades = [(v, t_grade(v, vs)) for v, vs in graph.items()]
     return [
         (
-            (row, col),
-            min(grade, center_fuzzy_set(row, col, shape)),
+            (x, y),
+            min(grade, center_fuzzy_set(x, y, shape)),
             grade_vec
         )
-        for (row, col), (grade, grade_vec) in t_grades]
+        for (x, y), (grade, grade_vec) in t_grades]
 
 plot_t_juncitons(graph_edges(GRAPH_3),
-                 map(itemgetter(0, 1), centered_t_grades(GRAPH_3, TEXT_SHOW.shape)))
+                 map(itemgetter(0, 1), centered_t_grades(GRAPH_3, TEXT_SHOW.shape[::-1])))
 
 
 # # Bridge direction estimation 
@@ -654,31 +642,43 @@ plot_t_juncitons(graph_edges(GRAPH_3),
 # In[18]:
 
 
-def direction_vector(t_grades):
-    sum_probs = sum(map(itemgetter(1), t_grades))
-    mults = [multiply(grade, vec) for _, grade, vec in t_grades if vec is not None]
-    return sum(mults) / sum_probs
+centered_t_grades(GRAPH_3, TEXT_SHOW.shape[::-1])
 
-def evaluate_direction(graph, image_shape):
-    return direction_vector(centered_t_grades(graph, image_shape))[::-1]
+
+# In[19]:
+
+
+def bridge_grade(edge, t_grades):
+    edge_dir = subtract(*edge)
+    return (
+        sum(abs(vcos(edge_dir, vec)) * grade for grade, vec in t_grades)
+        /
+        sum(grade for grade, _ in t_grades)
+    )
 
 
 # # Classification
 # Using abs of cos value between the estimated bridge direction vector, we determine how close each edge is to be a bridge. that way we clssify each edge to be either a bridge or a link
 
-# In[19]:
+# In[20]:
 
 
 class EdgeType(Enum):
     BRIDGE = (0, 0, 255) # blue
     LINK = (0, 255, 0) # green
 
-def classify_edges(graph, direction):
-    return [((p1, p2),
-             EdgeType.BRIDGE if abs(vcos(subtract(p2, p1), direction)) > 0.5 else EdgeType.LINK)
-            for p1, p2 in graph_edges(graph)]
+def classify_edges(graph, t_grades):
+    cleaned_t_grades = [(grade, vec) for _, grade, vec in t_grades if vec is not None]
+    return [
+        (
+            edge,
+            EdgeType.BRIDGE if bridge_grade(edge, cleaned_t_grades) > 0.5 else EdgeType.LINK
+        )
+        for edge in graph_edges(graph)
+    ]
 
-CLASSIFIED = classify_edges(GRAPH_3, evaluate_direction(GRAPH_3, TEXT_SHOW.shape))
+CLASSIFIED = classify_edges(GRAPH_3,
+                            centered_t_grades(GRAPH_3, TEXT_SHOW.shape[::-1]))
 
 imshow(show_lines(TEXT_SHOW,
                   map(itemgetter(0), CLASSIFIED),
@@ -686,7 +686,7 @@ imshow(show_lines(TEXT_SHOW,
        figure=figure_image())
 
 
-# In[20]:
+# In[21]:
 
 
 def run_all(path):
@@ -695,22 +695,25 @@ def run_all(path):
 
     max_verts, labels = extract_vertices(mark_junction_pixels(dist_maxima))
 
-    row_index_verts = [(c, r) for r, c in max_verts]
-
     graph = build_graph(
-        verts=set(row_index_verts),
+        verts=set(max_verts),
         find_connected_verts=partial(mask_connected,
                                      search_mask=dist_maxima,
                                      covermap=partial(
                                          pixel_vert,
                                          labels_map=labels,
-                                         verts=row_index_verts,
-                                         area_map=area_to_vert(row_index_verts, 3)
+                                         verts=max_verts,
+                                         area_map=area_to_vert(max_verts, 3)
                                      )))
 
     graph_3 = dilute_to_3_connected(graph)
 
-    classified = classify_edges(graph_3, evaluate_direction(graph_3, text_show.shape))
+    classified = classify_edges(graph_3,
+                                centered_t_grades(
+                                    graph_3,
+                                    text_show.shape[::-1]
+                                )
+                               )
 
     imshow(show_lines(text_show,
                       map(itemgetter(0), classified),
@@ -718,7 +721,7 @@ def run_all(path):
            figure=figure_image())
 
 
-# In[21]:
+# In[22]:
 
 
 run_all("document.jpg")
